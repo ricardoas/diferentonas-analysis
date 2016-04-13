@@ -27,6 +27,12 @@
 				<include>*</include>
 			</includes>
 		</fileSet>
+		<fileSet>
+			<outputDirectory></outputDirectory>
+			<directory>src/cassandra/cql</directory>
+			<includes>
+				<include>*</include>
+			</includes>
+		</fileSet>
 	</fileSets>
-
 </assembly>
