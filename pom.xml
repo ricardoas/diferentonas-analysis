@@ -5,7 +5,6 @@
 	<artifactId>diferentonas-analysis</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>Diferentonas' analysis using Spark ML</name>
-	<packaging>jar</packaging>
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -81,6 +80,18 @@
 									<mainClass>br.edu.ufcg.analytics.diferentonas.Main</mainClass>
 								</manifest>
 							</archive>
+						</configuration>
+					</execution>
+					<execution>
+						<id>dist</id>
+						<phase>package</phase>
+						<goals>
+							<goal>single</goal>
+						</goals>
+						<configuration>
+							<descriptors>
+								<descriptor>src/assembly/diferentonas.xml</descriptor>
+							</descriptors>
 						</configuration>
 					</execution>
 				</executions>
