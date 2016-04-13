@@ -1,5 +1,8 @@
 package br.edu.ufcg.analytics.diferentonas;
 
+import java.io.IOException;
+import java.util.Arrays;
+
 import org.apache.commons.configuration.Configuration;
 import org.apache.commons.configuration.ConfigurationException;
 import org.apache.commons.configuration.PropertiesConfiguration;
@@ -16,10 +19,10 @@ public class Main {
 	 * 
 	 * @param args
 	 * @throws ConfigurationException
+	 * @throws IOException 
 	 */
-	public static void main(String[] args) throws ConfigurationException {
-		Configuration config = new PropertiesConfiguration(args.length > 0? args[0]: "diferentonas.properties");
-		new SimilarityBatchJobSpark(config).run();
+	public static void main(String[] args) throws ConfigurationException, IOException {
+		Configuration config = new PropertiesConfiguration(args[0]);
+		new SimilarityBatchJobSpark(config).run(Arrays.copyOfRange(args, 1, args.length));
 	}
-
 }

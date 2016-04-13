@@ -1,10 +1,13 @@
 package br.edu.ufcg.analytics.diferentonas.batch;
 
+import java.io.IOException;
 import java.util.Random;
 
 import org.apache.commons.configuration.Configuration;
 import org.apache.spark.ml.clustering.LDA;
+import org.apache.spark.ml.clustering.LDAModel;
 import org.apache.spark.ml.feature.CountVectorizer;
+import org.apache.spark.ml.feature.CountVectorizerModel;
 import org.apache.spark.ml.feature.HashingTF;
 import org.apache.spark.ml.feature.IDF;
 import org.apache.spark.ml.feature.Word2Vec;
@@ -25,11 +28,19 @@ public enum VectorizationStrategy {
 			double minDF = config.getDouble("diferentonas.similarity.count.mindf", 1.0);
 			double minTF = config.getDouble("diferentonas.similarity.count.mintf", 1.0);
 
-			return new CountVectorizer().setInputCol(inputColumnName).setOutputCol(outputColumnName)
+			CountVectorizerModel model = new CountVectorizer().setInputCol(inputColumnName).setOutputCol(outputColumnName)
 					.setMinDF(minDF)
 					.setMinTF(minTF)
 					.setVocabSize(vocabSize)
-					.fit(df).transform(df);
+					.fit(df);
+			
+			System.out.println(" >> COUNT");
+			String[] vocabulary = model.vocabulary();
+			for (int i = 0; i < vocabulary.length; i++) {
+				System.out.printf(" %d: %s\n", i, vocabulary[i]);
+			}
+			System.out.println(" << COUNT");
+			return model.transform(df);
 		}
 	},
 	TFIDF{
@@ -67,10 +78,26 @@ public enum VectorizationStrategy {
 	LDA{
 		@Override
 		public DataFrame extractFeatures(Configuration config, DataFrame df, String inputColumnName,
-				String outputColumnName) {
+				String outputColumnName) throws IOException {
 
-			String featuresColumnName = "tmp_lda";
-			df = COUNT.extractFeatures(config, df, inputColumnName, featuresColumnName);
+			int vocabSize = config.getInt("diferentonas.similarity.count.vocabsize", 262144);
+			double minDF = config.getDouble("diferentonas.similarity.count.mindf", 1.0);
+			double minTF = config.getDouble("diferentonas.similarity.count.mintf", 1.0);
+			String featuresColumnName = "tmp_count";
+
+			CountVectorizerModel cvModel = new CountVectorizer().setInputCol(inputColumnName).setOutputCol(featuresColumnName)
+					.setMinDF(minDF)
+					.setMinTF(minTF)
+					.setVocabSize(vocabSize)
+					.fit(df);
+			
+			String[] vocabulary = cvModel.vocabulary();
+			
+
+			
+			df = cvModel.transform(df);
+			
+			df.show();
 
 			int k = config.getInt("diferentonas.similarity.lda.k", 10);
 			int maxIter = config.getInt("diferentonas.similarity.lda.maxiter", 20);
@@ -87,14 +114,27 @@ public enum VectorizationStrategy {
 //				System.out.printf("\n\n\n perplexity %d %.4f %.4f     \n\n\n", k, fit.logLikelihood(df), fit.logPerplexity(df));
 //			}
 			
-			return new LDA().setFeaturesCol(featuresColumnName).setTopicDistributionCol(outputColumnName)
+			LDAModel ldaModel = new LDA().setFeaturesCol(featuresColumnName).setTopicDistributionCol(outputColumnName)
 					.setK(k).setMaxIter(maxIter).setLearningDecay(learningDecay)
-					.setLearningOffset(learningOffset).fit(df).transform(df);
+					.setLearningOffset(learningOffset).fit(df);
+			System.out.println("  >>> VectorizationStrategy.extractFeatures()");
+			System.out.printf("\n\n\n perplexity %d %.4f %.4f     \n\n\n", k, ldaModel.logLikelihood(df), ldaModel.logPerplexity(df));
+			DataFrame topics = ldaModel.describeTopics();
+//			topics.select("termIndices").rdd().map
+			topics.show(false);
+			
+			System.out.println();
+			System.out.println();
+			System.out.println();
+			System.out.println("  <<< VectorizationStrategy.extractFeatures()");
+			ldaModel.save(String.format("lda_model_%d_%d", k, maxIter));
+//			new LDA()
+			return ldaModel.transform(df);
 		}
 	};
 
 	public abstract DataFrame extractFeatures(Configuration config, DataFrame df, String inputColumnName,
-			String outputColumnName);
+			String outputColumnName) throws IOException;
 
 	public String getCriteria() {
 		return this.name().toLowerCase();

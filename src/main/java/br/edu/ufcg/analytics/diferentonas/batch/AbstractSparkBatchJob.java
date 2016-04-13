@@ -1,6 +1,7 @@
 package br.edu.ufcg.analytics.diferentonas.batch;
 
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.Comparator;
 
@@ -62,5 +63,5 @@ public abstract class AbstractSparkBatchJob implements Serializable {
 		return keyspace;
 	}
 
-	public abstract void run(String... args);
+	public abstract void run(String... args) throws IOException;
 }
