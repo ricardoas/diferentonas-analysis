@@ -1,7 +1,6 @@
 drop KEYSPACE IF EXISTS diferentonas;
 
 create KEYSPACE diferentonas WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
-create TABLE diferentonas.convenios (
 
 CREATE TABLE IF NOT EXISTS diferentonas.similar ( 
 id INT,
