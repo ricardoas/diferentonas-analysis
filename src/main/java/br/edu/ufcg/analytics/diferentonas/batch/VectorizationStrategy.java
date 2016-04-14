@@ -1,7 +1,12 @@
 package br.edu.ufcg.analytics.diferentonas.batch;
 
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Random;
+import java.util.stream.Collectors;
 
 import org.apache.commons.configuration.Configuration;
 import org.apache.spark.ml.clustering.LDA;
@@ -11,7 +16,11 @@ import org.apache.spark.ml.feature.CountVectorizerModel;
 import org.apache.spark.ml.feature.HashingTF;
 import org.apache.spark.ml.feature.IDF;
 import org.apache.spark.ml.feature.Word2Vec;
+import org.apache.spark.mllib.linalg.DenseVector;
 import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+
+import scala.Tuple2;
 
 /**
  * @author Ricardo Ara&eacute;jo Santos - ricoaraujosantos@gmail.com
@@ -22,7 +31,7 @@ public enum VectorizationStrategy {
 	COUNT{
 		@Override
 		public DataFrame extractFeatures(Configuration config, DataFrame df, String inputColumnName,
-				String outputColumnName) {
+				String outputColumnName) throws IOException {
 
 			int vocabSize = config.getInt("diferentonas.similarity.count.vocabsize", 262144);
 			double minDF = config.getDouble("diferentonas.similarity.count.mindf", 1.0);
@@ -34,12 +43,13 @@ public enum VectorizationStrategy {
 					.setVocabSize(vocabSize)
 					.fit(df);
 			
-			System.out.println(" >> COUNT");
 			String[] vocabulary = model.vocabulary();
-			for (int i = 0; i < vocabulary.length; i++) {
-				System.out.printf(" %d: %s\n", i, vocabulary[i]);
+			try(FileWriter writer = new FileWriter(new File("vocabulario.csv"));){
+				writer.write("index,stem\n");
+				for (int i = 0; i < vocabulary.length; i++) {
+					writer.write(String.format("%d,%s\n", i, vocabulary[i]));
+				}
 			}
-			System.out.println(" << COUNT");
 			return model.transform(df);
 		}
 	},
@@ -97,7 +107,7 @@ public enum VectorizationStrategy {
 			
 			df = cvModel.transform(df);
 			
-			df.show();
+			df.show(false);
 
 			int k = config.getInt("diferentonas.similarity.lda.k", 10);
 			int maxIter = config.getInt("diferentonas.similarity.lda.maxiter", 20);
@@ -117,19 +127,72 @@ public enum VectorizationStrategy {
 			LDAModel ldaModel = new LDA().setFeaturesCol(featuresColumnName).setTopicDistributionCol(outputColumnName)
 					.setK(k).setMaxIter(maxIter).setLearningDecay(learningDecay)
 					.setLearningOffset(learningOffset).fit(df);
-			System.out.println("  >>> VectorizationStrategy.extractFeatures()");
-			System.out.printf("\n\n\n perplexity %d %.4f %.4f     \n\n\n", k, ldaModel.logLikelihood(df), ldaModel.logPerplexity(df));
-			DataFrame topics = ldaModel.describeTopics();
-//			topics.select("termIndices").rdd().map
-			topics.show(false);
 			
-			System.out.println();
+			try(FileWriter writer = new FileWriter(new File("params.csv"));){
+				writer.write("k,loglikelihood,logperplexity\n");
+				writer.write(String.format("%d,%f,%f\n", k, ldaModel.logLikelihood(df), ldaModel.logPerplexity(df)));
+			}
+
+			System.out.println("  >>> VectorizationStrategy.extractFeatures()");
+//			System.out.printf("\n\n\n perplexity %d %.4f %.4f     \n\n\n", k, ldaModel.logLikelihood(df), ldaModel.logPerplexity(df));
+			DataFrame topics = ldaModel.describeTopics();
+			
+			
+			List<Row> rows = topics.select("topic","termIndices", "termWeights").javaRDD().collect();
+			
+			
+			
+//			List<List<Tuple2<Integer, String>>> map2 = topics.select("topic","termIndices").javaRDD()
+//					.map(row -> row.getList(1))
+//					.map(l -> l.stream().map(obj -> new Tuple2<>((Integer) obj, vocabulary[(Integer) obj]))
+//							.collect(Collectors.toList())).collect();
+			
+			
+			try(FileWriter topicIndexWriter = new FileWriter(new File("topic_index.csv"));
+					FileWriter topicWriter = new FileWriter(new File("topic_term.csv"));
+					FileWriter topicWeightWriter = new FileWriter(new File("topic_weight.csv"));
+					){
+				topicIndexWriter.write("id,i_0,i_1,i_2,i_3,i_4,i_5,i_6,i_7,i_8,i_9\n");
+				topicWriter.write("id,i_0,i_1,i_2,i_3,i_4,i_5,i_6,i_7,i_8,i_9\n");
+				topicWeightWriter.write("id,i_0,i_1,i_2,i_3,i_4,i_5,i_6,i_7,i_8,i_9\n");
+				for (Row row : rows) {
+					List<Tuple2<Integer, String>> tupleList = row.getList(1).stream().map(obj -> new Tuple2<>((Integer) obj, vocabulary[(Integer) obj])).collect(Collectors.toList());
+					String string = Arrays.toString(tupleList.stream().mapToInt(tuple -> tuple._1).toArray());
+					String stringT = Arrays.toString(tupleList.stream().map(tuple -> tuple._2).toArray());
+					topicIndexWriter.write(String.format("%d,%s,\n", row.getInt(0), string.substring(1, string.length()-1)));
+					topicWriter.write(String.format("%d,%s,\n", row.getInt(0), stringT.substring(1, stringT.length()-1)));
+					
+					List<Double> weights = row.getList(2).stream().map(obj -> (Double) obj).collect(Collectors.toList());
+					String stringW = weights.toString();
+					topicWeightWriter.write(String.format("%d,%s,\n", row.getInt(0), stringW.substring(1, stringW.length()-1)));
+				}
+				
+				
+//				for (List<Tuple2<Integer, String>> tupleList : map2) {
+//					String string = Arrays.toString(tupleList.stream().mapToInt(tuple -> tuple._1).toArray());
+//					String stringT = Arrays.toString(tupleList.stream().map(tuple -> tuple._2).toArray());
+//					topicIndexWriter.write(String.format("%d,%s,\n", tupleList.size(), string.substring(1, string.length()-1)));
+//					topicWriter.write(String.format("%d,%s,\n", tupleList.size(), stringT.substring(1, stringT.length()-1)));
+//				}
+			}
+			topics.show(false);
 			System.out.println();
 			System.out.println();
 			System.out.println("  <<< VectorizationStrategy.extractFeatures()");
 			ldaModel.save(String.format("lda_model_%d_%d", k, maxIter));
 //			new LDA()
-			return ldaModel.transform(df);
+			DataFrame resultDataFrame = ldaModel.transform(df);
+			rows = resultDataFrame.select("nr_convenio","features").javaRDD().collect();
+			try (FileWriter resultWriter = new FileWriter(new File("result.csv"));
+					) {
+				for (Row row : rows) {
+					String stringW = Arrays.toString(((DenseVector)row.get(1)).values()).toString();
+					resultWriter.write(
+							String.format("%d,%s,\n", row.getInt(0), stringW.substring(1, stringW.length() - 1)));
+				}
+			}
+			
+			return resultDataFrame;
 		}
 	};
 
